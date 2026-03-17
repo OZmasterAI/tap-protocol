@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tap-protocol"
+version = "0.1.0"
+description = "Toroidal Agent Protocol — orchestrate multiple AI coding agents via JSON-RPC"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "OZmasterAI" }]
+keywords = ["ai", "agents", "orchestration", "coding-agent", "json-rpc", "claude", "goose"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.scripts]
+tap = "tap.cli:run_cli"
+
+[project.urls]
+Repository = "https://github.com/OZmasterAI/tap-protocol"
+
+[tool.pytest.ini_options]
+testpaths = ["tap/tests"]
