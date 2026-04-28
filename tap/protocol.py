@@ -19,6 +19,7 @@ class SpawnRequest:
     model: str = "sonnet"
     adapter: str = "claude"
     persistent: bool = True
+    isolation: str = "none"
     config: dict = field(default_factory=dict)
 
 
@@ -28,6 +29,7 @@ class SpawnResponse:
     pid: int
     socket_path: str
     status: str = "ready"
+    worktree_path: str | None = None
 
 
 @dataclass

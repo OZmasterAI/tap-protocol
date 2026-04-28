@@ -11,6 +11,11 @@ MAX_AGENTS = 20
 DEFAULT_ADAPTER = "claude"
 WATCHDOG_TIMEOUT = int(os.environ.get("TAP_WATCHDOG_TIMEOUT", "30"))
 
+# Isolation modes
+ISOLATION_NONE = "none"
+ISOLATION_WORKTREE = "worktree"
+WORKTREE_BASE_DIR = os.environ.get("TAP_WORKTREE_DIR", "/tmp/tap-worktrees")
+
 # Agent modes
 MODE_STREAMING = "streaming"
 MODE_EPHEMERAL = "ephemeral"

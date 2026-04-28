@@ -1,10 +1,14 @@
 """Tests for TAP agent manager."""
 
+import os
+import subprocess
 import time
+
+import pytest
 
 from tap.adapters.mock import MockAdapter
 from tap.agent_manager import AgentManager
-from tap.constants import STATE_DEAD, STATE_READY, STATE_WORKING
+from tap.constants import ISOLATION_WORKTREE, STATE_DEAD, STATE_READY, STATE_WORKING
 
 
 def _make_mgr():
@@ -115,3 +119,70 @@ def test_spawn_over_dead_agent():
     new_agent = mgr.spawn("respawn", role="tester")
     assert new_agent.alive
     mgr.kill("respawn")
+
+
+def _init_git_repo(path: str) -> str:
+    subprocess.run(["git", "init", path], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", path, "config", "user.email", "test@test.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", path, "config", "user.name", "Test"],
+        check=True,
+        capture_output=True,
+    )
+    dummy = os.path.join(path, "README.md")
+    with open(dummy, "w") as f:
+        f.write("# test\n")
+    subprocess.run(["git", "-C", path, "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", path, "commit", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    return path
+
+
+@pytest.fixture()
+def git_repo(tmp_path):
+    repo = str(tmp_path / "repo")
+    _init_git_repo(repo)
+    yield repo
+
+
+def test_spawn_with_worktree_isolation(git_repo, tmp_path):
+    os.environ["TAP_WORKTREE_DIR"] = str(tmp_path / "worktrees")
+    mgr = AgentManager(adapter_factory=MockAdapter, repo_dir=git_repo)
+    agent = mgr.spawn("wt-1", role="tester", isolation=ISOLATION_WORKTREE)
+    assert agent.worktree_path is not None
+    assert os.path.isdir(agent.worktree_path)
+    assert agent.isolation == ISOLATION_WORKTREE
+    mgr.kill("wt-1")
+
+
+def test_spawn_worktree_sets_cwd(git_repo, tmp_path):
+    os.environ["TAP_WORKTREE_DIR"] = str(tmp_path / "worktrees")
+    mgr = AgentManager(adapter_factory=MockAdapter, repo_dir=git_repo)
+    agent = mgr.spawn("wt-cwd", role="tester", isolation=ISOLATION_WORKTREE)
+    # The mock adapter runs python -c "..." — check /proc/<pid>/cwd
+    proc_cwd = os.readlink(f"/proc/{agent.process.pid}/cwd")
+    assert proc_cwd == agent.worktree_path
+    mgr.kill("wt-cwd")
+
+
+def test_kill_removes_worktree(git_repo, tmp_path):
+    os.environ["TAP_WORKTREE_DIR"] = str(tmp_path / "worktrees")
+    mgr = AgentManager(adapter_factory=MockAdapter, repo_dir=git_repo)
+    agent = mgr.spawn("wt-rm", role="tester", isolation=ISOLATION_WORKTREE)
+    wt_path = agent.worktree_path
+    assert os.path.isdir(wt_path)
+    mgr.kill("wt-rm")
+    assert not os.path.isdir(wt_path)
+
+
+def test_spawn_without_repo_dir_raises():
+    mgr = AgentManager(adapter_factory=MockAdapter)
+    with pytest.raises(ValueError, match="repo_dir required"):
+        mgr.spawn("wt-err", role="tester", isolation=ISOLATION_WORKTREE)

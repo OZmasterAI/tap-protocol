@@ -10,6 +10,8 @@ from typing import Callable
 
 from .adapters.base import BaseAdapter
 from .constants import (
+    ISOLATION_NONE,
+    ISOLATION_WORKTREE,
     MODE_EPHEMERAL,
     MODE_STREAMING,
     STATE_DEAD,
@@ -34,6 +36,8 @@ class ManagedAgent:
     started_at: float = field(default_factory=time.time)
     last_heartbeat: float = field(default_factory=time.time)
     current_task_id: str | None = None
+    isolation: str = ISOLATION_NONE
+    worktree_path: str | None = None
     mode: str = MODE_STREAMING
     session_id: str | None = None
     degraded_reason: str | None = None
@@ -56,10 +60,20 @@ class ManagedAgent:
 class AgentManager:
     """Manages the lifecycle of TAP agent subprocesses."""
 
-    def __init__(self, adapter_factory: Callable[..., BaseAdapter] | None = None):
+    def __init__(
+        self,
+        adapter_factory: Callable[..., BaseAdapter] | None = None,
+        repo_dir: str | None = None,
+    ):
         self._agents: dict[str, ManagedAgent] = {}
         self._lock = threading.Lock()
         self._adapter_factory = adapter_factory
+        self._repo_dir = repo_dir
+        self._worktree_mgr: WorktreeManager | None = None
+        if repo_dir:
+            from .worktree import WorktreeManager
+
+            self._worktree_mgr = WorktreeManager()
 
     def spawn(
         self,
@@ -68,13 +82,13 @@ class AgentManager:
         model: str = "sonnet",
         adapter: BaseAdapter | None = None,
         persistent: bool = True,
+        isolation: str = ISOLATION_NONE,
     ) -> ManagedAgent:
         """Spawn a new agent subprocess."""
         if agent_id in self._agents:
             existing = self._agents[agent_id]
             if existing.alive:
                 raise ValueError(f"Agent {agent_id} is already running")
-            # Dead agent — clean up and respawn
             self._cleanup(agent_id)
 
         if adapter is None:
@@ -83,6 +97,14 @@ class AgentManager:
             else:
                 raise ValueError("No adapter provided and no adapter_factory set")
 
+        worktree_path = None
+        cwd = None
+        if isolation == ISOLATION_WORKTREE:
+            if not self._worktree_mgr or not self._repo_dir:
+                raise ValueError("repo_dir required for worktree isolation")
+            worktree_path = self._worktree_mgr.create(agent_id, self._repo_dir)
+            cwd = worktree_path
+
         cmd = adapter.spawn_cmd()
         proc = subprocess.Popen(
             cmd,
@@ -90,7 +112,8 @@ class AgentManager:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1,  # line-buffered
+            bufsize=1,
+            cwd=cwd,
         )
 
         agent = ManagedAgent(
@@ -100,6 +123,8 @@ class AgentManager:
             persistent=persistent,
             adapter=adapter,
             process=proc,
+            isolation=isolation,
+            worktree_path=worktree_path,
         )
 
         with self._lock:
@@ -124,6 +149,9 @@ class AgentManager:
                     agent.process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     pass
+
+        if agent.worktree_path and self._worktree_mgr and self._repo_dir:
+            self._worktree_mgr.remove(agent_id, self._repo_dir)
 
         self._cleanup(agent_id)
         return True

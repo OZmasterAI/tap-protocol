@@ -112,3 +112,22 @@ def test_task_status(daemon):
     status = client.task_status(tid)
     assert status["task_id"] == tid
     assert status["status"] == "pending"
+
+
+def test_spawn_accepts_isolation_param(daemon):
+    d, sock = daemon
+    client = TAPClient(sock)
+    resp = client.spawn("iso-1", role="tester", model="mock")
+    assert resp["status"] == "ready"
+    assert "worktree_path" not in resp
+
+
+def test_cli_isolation_flag():
+    from tap.cli import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(["spawn", "test-agent", "--isolation", "worktree"])
+    assert args.isolation == "worktree"
+
+    args_default = parser.parse_args(["spawn", "test-agent"])
+    assert args_default.isolation == "none"

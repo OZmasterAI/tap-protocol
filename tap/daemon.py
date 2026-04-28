@@ -106,18 +106,24 @@ class TAPDaemon:
         model = params.get("model", "sonnet")
         persistent = params.get("persistent", True)
 
+        isolation = params.get("isolation", "none")
+
         agent = self.manager.spawn(
             agent_id=agent_id,
             role=role,
             model=model,
             persistent=persistent,
+            isolation=isolation,
         )
-        return {
+        result = {
             "agent_id": agent.agent_id,
             "pid": agent.process.pid,
             "socket_path": self.socket_path,
             "status": "ready",
         }
+        if agent.worktree_path:
+            result["worktree_path"] = agent.worktree_path
+        return result
 
     def _handle_kill(self, params: dict) -> dict:
         agent_id = params.get("agent_id", "")

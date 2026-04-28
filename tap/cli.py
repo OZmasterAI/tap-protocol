@@ -40,8 +40,12 @@ def cmd_spawn(args):
         role=args.role or args.agent_id,
         model=args.model,
         persistent=not args.ephemeral,
+        isolation=args.isolation,
     )
-    print(f"Spawned {resp['agent_id']} (pid={resp['pid']}, status={resp['status']})")
+    msg = f"Spawned {resp['agent_id']} (pid={resp['pid']}, status={resp['status']})"
+    if resp.get("worktree_path"):
+        msg += f" worktree={resp['worktree_path']}"
+    print(msg)
 
 
 def cmd_kill(args):
@@ -162,6 +166,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--model", default="sonnet", help="Model to use")
     p.add_argument(
         "--ephemeral", action="store_true", help="Ephemeral mode (no persistence)"
+    )
+    p.add_argument(
+        "--isolation",
+        default="none",
+        choices=["none", "worktree"],
+        help="Isolation mode (default: none)",
     )
 
     # kill

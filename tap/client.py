@@ -49,17 +49,18 @@ class TAPClient:
         role: str = "",
         model: str = "sonnet",
         persistent: bool = True,
+        isolation: str = "none",
     ) -> dict:
         """Spawn a new agent."""
-        return self.call(
-            "session/spawn",
-            {
-                "agent_id": agent_id,
-                "role": role or agent_id,
-                "model": model,
-                "persistent": persistent,
-            },
-        )
+        params = {
+            "agent_id": agent_id,
+            "role": role or agent_id,
+            "model": model,
+            "persistent": persistent,
+        }
+        if isolation != "none":
+            params["isolation"] = isolation
+        return self.call("session/spawn", params)
 
     def kill(self, agent_id: str) -> dict:
         """Kill an agent."""
