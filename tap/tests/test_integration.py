@@ -5,6 +5,11 @@ import time
 
 import pytest
 
+import sys
+
+sys.path.insert(0, os.path.expanduser("~/.claude/hooks"))
+import shared.agent_channel as _ac
+
 from tap.adapters.mock import MockAdapter
 from tap.client import TAPClient
 from tap.daemon import TAPDaemon
@@ -15,7 +20,7 @@ from tap.storage import TAPStorage
 def system(tmp_path):
     """Full TAP system: daemon + client."""
     sock = str(tmp_path / "tap-integ.sock")
-    os.environ["TAP_DB_PATH"] = str(tmp_path / "integ.db")
+    _ac.DB_PATH = str(tmp_path / "integ.db")
 
     daemon = TAPDaemon(
         socket_path=sock,
@@ -27,30 +32,35 @@ def system(tmp_path):
     client = TAPClient(sock)
     yield daemon, client
     daemon.stop()
-    os.environ.pop("TAP_DB_PATH", None)
 
 
 def test_full_cycle(system):
     """Spawn agent, dispatch task, check status, kill agent."""
     daemon, client = system
 
+    # Spawn
     resp = client.spawn("integ-1", role="tester")
     assert resp["status"] == "ready"
 
+    # Dispatch
     resp = client.send("integ-1", "echo hello", priority=3)
     assert resp["accepted"]
     task_id = resp["task_id"]
 
+    # Check agent status
     status = client.status("integ-1")
     assert status["alive"] is True
     assert status["state"] in ("ready", "working")
 
+    # Check task status
     task = client.task_status(task_id)
     assert task["task_id"] == task_id
 
+    # Kill
     resp = client.kill("integ-1")
     assert resp["killed"] is True
 
+    # Verify gone
     status = client.status("integ-1")
     assert status["alive"] is False
 
@@ -61,14 +71,17 @@ def test_persistent_agent_multiple_tasks(system):
 
     client.spawn("p1", role="tester", persistent=True)
 
+    # Task 1
     resp1 = client.send("p1", "task one")
     assert resp1["accepted"]
 
     time.sleep(0.5)
 
+    # Task 2 — same agent, still alive
     resp2 = client.send("p1", "task two")
     assert resp2["accepted"]
 
+    # Agent still running
     status = client.status("p1")
     assert status["alive"] is True
 
@@ -119,9 +132,11 @@ def test_handoff_between_agents(system):
     client.spawn("from-agent", role="researcher")
     client.spawn("to-agent", role="builder")
 
+    # Create initial task
     resp = client.send("from-agent", "initial research")
     task_id = resp["task_id"]
 
+    # Handoff
     handoff = client.handoff(
         from_agent="from-agent",
         to_agent="to-agent",

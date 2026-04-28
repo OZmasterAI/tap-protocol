@@ -1,19 +1,33 @@
-"""Tests for TAP standalone storage."""
+"""Tests for TAP storage bridge."""
 
 import os
+import tempfile
 
 import pytest
+
+# Redirect agent_channel to a temp DB for testing
+_tmp = tempfile.mktemp(suffix=".db")
+os.environ.setdefault("_TAP_TEST_DB", _tmp)
+
+import sys
+
+sys.path.insert(0, os.path.expanduser("~/.claude/hooks"))
+import shared.agent_channel as _ac
+
+_ac.DB_PATH = _tmp  # override before any connections
 
 from tap.storage import TAPStorage
 
 
 @pytest.fixture(autouse=True)
-def clean_db(tmp_path):
-    """Each test gets its own temp DB."""
-    db = str(tmp_path / "test.db")
-    os.environ["TAP_DB_PATH"] = db
+def clean_db():
+    """Reset DB between tests."""
+    _ac.DB_PATH = tempfile.mktemp(suffix=".db")
     yield
-    os.environ.pop("TAP_DB_PATH", None)
+    try:
+        os.unlink(_ac.DB_PATH)
+    except OSError:
+        pass
 
 
 def test_dispatch_creates_task():
@@ -22,7 +36,9 @@ def test_dispatch_creates_task():
     assert tid is not None
     task = store.get(tid)
     assert task is not None
-    assert task["status"] == "pending"
+    assert (
+        task["status"] == "pending"
+    )  # dispatch creates, doesn't auto-assign via claim
     assert task["assigned_to"] == "agent-1"
 
 

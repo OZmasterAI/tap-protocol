@@ -1,9 +1,16 @@
 """Tests for TAP daemon and client."""
 
 import os
+import tempfile
 import time
 
 import pytest
+
+# Override agent_channel DB for tests
+import sys
+
+sys.path.insert(0, os.path.expanduser("~/.claude/hooks"))
+import shared.agent_channel as _ac
 
 from tap.adapters.mock import MockAdapter
 from tap.client import TAPClient
@@ -15,7 +22,7 @@ from tap.storage import TAPStorage
 def daemon(tmp_path):
     """Start a daemon with mock adapter on a temp socket."""
     sock = str(tmp_path / "tap-test.sock")
-    os.environ["TAP_DB_PATH"] = str(tmp_path / "test.db")
+    _ac.DB_PATH = str(tmp_path / "test.db")
 
     d = TAPDaemon(
         socket_path=sock,
@@ -23,10 +30,9 @@ def daemon(tmp_path):
         storage=TAPStorage(),
     )
     d.start_background()
-    time.sleep(0.3)
+    time.sleep(0.3)  # let server bind
     yield d, sock
     d.stop()
-    os.environ.pop("TAP_DB_PATH", None)
 
 
 def test_daemon_accepts_connection(daemon):
