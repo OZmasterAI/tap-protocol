@@ -8,3 +8,4 @@ build/
 *.db-wal
 *.db-shm
 .tap/
+docs/plans/
