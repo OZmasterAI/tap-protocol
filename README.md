@@ -90,6 +90,28 @@ tap spawn worker --persistent         # stays alive across tasks (warm context)
 tap spawn worker --ephemeral          # fresh subprocess per task (clean slate)
 ```
 
+## Worktree Isolation
+
+By default, all agents share the same working directory. When you need agents
+to edit files without stepping on each other, spawn them with worktree
+isolation. Each isolated agent gets its own git worktree -- a full copy of the
+repo on a dedicated branch that shares the parent `.git` directory.
+
+```bash
+# CLI
+tap spawn builder --role builder --isolation worktree
+```
+
+```python
+# Python SDK
+client.spawn("builder", role="builder", isolation="worktree")
+```
+
+The agent's subprocess runs with its `cwd` set to the worktree path. When the
+agent is killed via `tap kill`, the worktree and its temporary branch are
+automatically removed. Set `TAP_WORKTREE_DIR` to control where worktrees are
+created (default: `/tmp/tap-worktrees`).
+
 ## Python SDK
 
 ```python
