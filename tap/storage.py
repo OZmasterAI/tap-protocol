@@ -2,16 +2,9 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any
 
-# Add hooks to path so we can import shared.agent_channel
-_hooks_dir = os.path.expanduser("~/.claude/hooks")
-if _hooks_dir not in sys.path:
-    sys.path.insert(0, _hooks_dir)
-
-from shared.agent_channel import (
+from tap.agent_channel import (
     archive_tasks,
     cancel_stale,
     claim_next_task,

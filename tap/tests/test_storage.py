@@ -9,10 +9,7 @@ import pytest
 _tmp = tempfile.mktemp(suffix=".db")
 os.environ.setdefault("_TAP_TEST_DB", _tmp)
 
-import sys
-
-sys.path.insert(0, os.path.expanduser("~/.claude/hooks"))
-import shared.agent_channel as _ac
+import tap.agent_channel as _ac
 
 _ac.DB_PATH = _tmp  # override before any connections
 

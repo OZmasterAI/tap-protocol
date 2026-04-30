@@ -5,10 +5,7 @@ import time
 
 import pytest
 
-import sys
-
-sys.path.insert(0, os.path.expanduser("~/.claude/hooks"))
-import shared.agent_channel as _ac
+import tap.agent_channel as _ac
 
 from tap.adapters.mock import MockAdapter
 from tap.client import TAPClient
