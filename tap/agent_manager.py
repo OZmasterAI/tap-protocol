@@ -10,6 +10,8 @@ from typing import Callable
 
 from .adapters.base import BaseAdapter
 from .constants import (
+    DEFAULT_SANDBOX_PROVIDER,
+    ISOLATION_CONTAINER,
     ISOLATION_NONE,
     ISOLATION_WORKTREE,
     MODE_EPHEMERAL,
@@ -38,6 +40,7 @@ class ManagedAgent:
     current_task_id: str | None = None
     isolation: str = ISOLATION_NONE
     worktree_path: str | None = None
+    sandbox_handle: object | None = None
     mode: str = MODE_STREAMING
     session_id: str | None = None
     degraded_reason: str | None = None
@@ -83,6 +86,7 @@ class AgentManager:
         adapter: BaseAdapter | None = None,
         persistent: bool = True,
         isolation: str = ISOLATION_NONE,
+        config: dict | None = None,
     ) -> ManagedAgent:
         """Spawn a new agent subprocess."""
         if agent_id in self._agents:
@@ -98,23 +102,29 @@ class AgentManager:
                 raise ValueError("No adapter provided and no adapter_factory set")
 
         worktree_path = None
-        cwd = None
-        if isolation == ISOLATION_WORKTREE:
-            if not self._worktree_mgr or not self._repo_dir:
-                raise ValueError("repo_dir required for worktree isolation")
-            worktree_path = self._worktree_mgr.create(agent_id, self._repo_dir)
-            cwd = worktree_path
+        sandbox_handle = None
 
-        cmd = adapter.spawn_cmd()
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            cwd=cwd,
-        )
+        if isolation in (ISOLATION_WORKTREE, ISOLATION_CONTAINER):
+            if not self._worktree_mgr or not self._repo_dir:
+                raise ValueError("repo_dir required for worktree/container isolation")
+            worktree_path = self._worktree_mgr.create(agent_id, self._repo_dir)
+
+        if isolation == ISOLATION_CONTAINER:
+            provider = self._get_sandbox_provider(config)
+            sandbox_handle = provider.create(agent_id, worktree_path, config)
+            cmd = adapter.spawn_cmd()
+            proc = provider.exec(sandbox_handle, cmd)
+        else:
+            cmd = adapter.spawn_cmd()
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                cwd=worktree_path,
+            )
 
         agent = ManagedAgent(
             agent_id=agent_id,
@@ -125,6 +135,7 @@ class AgentManager:
             process=proc,
             isolation=isolation,
             worktree_path=worktree_path,
+            sandbox_handle=sandbox_handle,
         )
 
         with self._lock:
@@ -149,6 +160,10 @@ class AgentManager:
                     agent.process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     pass
+
+        if agent.sandbox_handle:
+            provider = self._get_sandbox_provider()
+            provider.destroy(agent.sandbox_handle)
 
         if agent.worktree_path and self._worktree_mgr and self._repo_dir:
             self._worktree_mgr.remove(agent_id, self._repo_dir)
@@ -340,6 +355,21 @@ class AgentManager:
         with self._lock:
             self._agents[agent_id] = new_agent
         return True
+
+    def _get_sandbox_provider(self, config: dict | None = None):
+        """Resolve the sandbox provider from config or default."""
+        from .sandboxes import DockerProvider, NoSandboxProvider, PodmanProvider
+
+        name = (config or {}).get("sandbox", DEFAULT_SANDBOX_PROVIDER)
+        providers = {
+            "docker": DockerProvider,
+            "podman": PodmanProvider,
+            "none": NoSandboxProvider,
+        }
+        cls = providers.get(name)
+        if cls is None:
+            raise ValueError(f"Unknown sandbox provider: {name}")
+        return cls()
 
     def _cleanup(self, agent_id: str) -> None:
         """Remove an agent from the registry."""

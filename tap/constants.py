@@ -14,7 +14,12 @@ WATCHDOG_TIMEOUT = int(os.environ.get("TAP_WATCHDOG_TIMEOUT", "30"))
 # Isolation modes
 ISOLATION_NONE = "none"
 ISOLATION_WORKTREE = "worktree"
+ISOLATION_CONTAINER = "container"
 WORKTREE_BASE_DIR = os.environ.get("TAP_WORKTREE_DIR", "/tmp/tap-worktrees")
+
+# Sandbox defaults
+DEFAULT_SANDBOX_PROVIDER = os.environ.get("TAP_SANDBOX_PROVIDER", "docker")
+DEFAULT_SANDBOX_IMAGE = os.environ.get("TAP_SANDBOX_IMAGE", "node:22-bookworm")
 
 # Agent modes
 MODE_STREAMING = "streaming"
